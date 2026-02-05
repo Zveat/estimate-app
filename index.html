@@ -1,0 +1,108 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="Content-Style-Type" content="text/css">
+  <title></title>
+  <meta name="Generator" content="Cocoa HTML Writer">
+  <meta name="CocoaVersion" content="2685.4">
+  <style type="text/css">
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; -webkit-text-stroke: #000000}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; -webkit-text-stroke: #000000; min-height: 14.0px}
+    span.s1 {font-kerning: none}
+  </style>
+</head>
+<body>
+<p class="p1"><span class="s1">function createFullEstimateSheet() {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const ss = SpreadsheetApp.getActiveSpreadsheet();</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>// Удаляем старый лист "Смета", если есть</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const oldSheet = ss.getSheetByName("Смета");</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>if (oldSheet) ss.deleteSheet(oldSheet);</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>// Создаем новый лист</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const sheet = ss.insertSheet("Смета");</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>// Заголовки</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const headers = ["Категория","Подкатегория","Название работы","Ед. изм","Объем","Сложность","Цена за ед.","Итог"];</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>sheet.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight("bold");</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>sheet.setColumnWidths(1,8,150);</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>// Данные справочника</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const spr = ss.getSheetByName("Справочник");</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const data = spr.getRange(2,1,spr.getLastRow()-1,7).getValues(); // Код, Категория, Подкатегория, Название, Ед, Базовая цена, Сложность</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>// Получаем уникальные категории для выпадающего списка</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const categories = [...new Set(data.map(r =&gt; r[1]).filter(v =&gt; v))];</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const catRule = SpreadsheetApp.newDataValidation().requireValueInList(categories).build();</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>sheet.getRange("A2:A1000").setDataValidation(catRule);</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>// Сложность</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const difficulties = ["Стандарт","Выше среднего","Сложно"];</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const diffRule = SpreadsheetApp.newDataValidation().requireValueInList(difficulties).build();</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>sheet.getRange("F2:F1000").setDataValidation(diffRule);</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>// Создаем пользовательскую функцию для вычисления цены по диапазону объема</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>// Нужно будет использовать в ячейке G</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const script = `</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>/**</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">   </span>* volumePrice(workName, volume, difficulty)</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">   </span>* @param {string} workName - Название работы</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">   </span>* @param {number} volume - Объем работы</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">   </span>* @param {string} difficulty - Стандарт/Выше среднего/Сложно</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">   </span>* @return {number} цена за единицу</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">   </span>*/</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>function volumePrice(workName, volume, difficulty) {</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>var ss = SpreadsheetApp.getActiveSpreadsheet();</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>var spr = ss.getSheetByName("Справочник");</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>var data = spr.getRange(2,1,spr.getLastRow()-1,7).getValues();</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">    </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>// Найдем работу</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>for(var i=0;i&lt;data.length;i++){</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>if(data[i][3] == workName){</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>var rangesText = data[i][5]; // "10-40 м2 – 3000; 40-60 – 2500"</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>var difficultyText = data[i][6]; // "Стандарт;Выше среднего;Сложно"</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">        </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>var ranges = rangesText.split(";");</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>var prices = [];</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>for(var j=0;j&lt;ranges.length;j++){</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">          </span>var p = ranges[j].match(/–\\s*(\\d+)/);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">          </span>if(p) prices.push(parseFloat(p[1]));</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>// Найдем правильный диапазон</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>for(var j=0;j&lt;ranges.length;j++){</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">          </span>var m = ranges[j].match(/(\\d+)-(\\d+)/);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">          </span>if(m){</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>var min = parseFloat(m[1]);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>var max = parseFloat(m[2]);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>if(volume&gt;=min &amp;&amp; volume&lt;=max){</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">              </span>var price = prices[j];</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">              </span>var coef = 1;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">              </span>if(difficulty=="Выше среднего") coef=1.2;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">              </span>else if(difficulty=="Сложно") coef=1.5;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">              </span>return price*coef;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">          </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>return 0;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>`;</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>// Сохраняем функцию в проект</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>const project = ScriptApp.getProjectTriggers(); // Просто чтобы скрипт сработал, Apps Script нужно сохранять вручную</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>// Устанавливаем формулы для цен и итогов</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>for(let i=2;i&lt;=1000;i++){</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>sheet.getRange(i,7).setFormula(`=IF(E${i}="","",volumePrice(C${i},E${i},F${i}))`);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>sheet.getRange(i,8).setFormula(`=IF(G${i}="","",E${i}*G${i})`);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>}</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>sheet.getRange("E2:E1000").setNumberFormat("0.00");</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>sheet.getRange("G2:H1000").setNumberFormat("0.00");</span></p>
+<p class="p2"><span class="s1"><span class="Apple-converted-space">  </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>SpreadsheetApp.getUi().alert("Лист 'Смета' создан с формулами по диапазону объема и сложности.");</span></p>
+<p class="p1"><span class="s1">}</span></p>
+</body>
+</html>
